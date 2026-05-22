@@ -350,6 +350,7 @@ class AnkiCleanerApp:
             return
         path = filedialog.asksaveasfilename(
             title='导出原始 SQLite',
+            initialdir='output',
             defaultextension='.anki2',
             filetypes=[('SQLite 数据库', '*.anki2;*.sqlite'), ('所有文件', '*.*')])
         if path:
@@ -465,6 +466,7 @@ class AnkiCleanerApp:
             return
         path = filedialog.asksaveasfilename(
             title='导出清理后的 SQLite',
+            initialdir='output',
             defaultextension='.anki2',
             filetypes=[('SQLite 数据库', '*.anki2;*.sqlite'), ('所有文件', '*.*')])
         if path:
@@ -493,6 +495,7 @@ class AnkiCleanerApp:
     def _browse_output(self):
         path = filedialog.asksaveasfilename(
             title='保存为 apkg',
+            initialdir='output',
             defaultextension='.apkg',
             filetypes=[('Anki 牌组', '*.apkg')])
         if path:

@@ -2,11 +2,18 @@
 __pycache__/
 *.pyc
 *.pyo
-*.pyd
+
+# PyInstaller build cache
+*.spec
+build/
+
+# UPX
+upx-*/
 
 # Reasonix workspace config
 .reasonix/
 
-# 原始 apkg 和中间产物
+# 原始 apkg 和中间清理产物
 税务师.apkg
 税务师_cleaned.apkg
+税务师_cleaned_puretext.apkg
