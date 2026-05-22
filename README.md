@@ -5,21 +5,28 @@
 ## 功能流程
 
 ```mermaid
-flowchart LR
-    A(["📂 选择 .apkg"]) -->
-    B["📦 解压 ZIP"] -->
+flowchart TB
+    A(["📂 选择 .apkg"])
+    B["📦 解压 ZIP"]
     C{"数据库格式？"}
-    C -->|collection.anki21b| D["🔧 zstd 解压"]
-    C -->|collection.anki2| E["🗄️ 直接读取 SQLite"]
-    D & E --> F["💾 导出原始 SQLite"]
-    F --> G["☑️ 勾选清理项目"]
-    G --> H["⚡ 执行清理"]
-    H --> I["💾 导出已清理 SQLite"]
-    I --> J{"原格式？"}
-    J -->|新版| K["🔧 zstd 压缩"]
+    D["🔧 zstd 解压"]
+    E["🗄️ 直接读取 SQLite"]
+    F["💾 导出原始 SQLite"]
+    G["☑️ 勾选清理项目"]
+    H["⚡ 执行清理"]
+    I["💾 导出已清理 SQLite"]
+    J{"原格式？"}
+    K["🔧 zstd 压缩"]
+    L["📦 打包 .apkg"]
+
+    A --> B --> C
+    C -->|collection.anki21b| D
+    C -->|collection.anki2| E
+    D --> F
+    E --> F
+    F --> G --> H --> I --> J
+    J -->|新版| K --> L
     J -->|旧版| L
-    K --> M["📦 打包 .apkg"]
-    L --> M
 ```
 
 ## Apkg 文件结构
