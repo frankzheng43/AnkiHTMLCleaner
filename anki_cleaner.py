@@ -41,56 +41,70 @@ def _get_sqlite3():
         _sqlite3 = sqlite3
     return _sqlite3
 
-# ── zstd 加载 ──────────────────────────────────────────────
+# ── zstd ──────────────────────────────────────────────
 
 def load_zstd():
-    """查找并加载 libzstd.dll"""
+    """尝试加载 zstd（优先用 zstandard 包，回退到 ctypes+DLL）"""
+    try:
+        import zstandard as _zs
+        # 验证可用
+        _zs.decompress(b'')
+        return _zs, 'python'
+    except:
+        pass
+    
+    # 回退：ctypes + libzstd.dll
     dll_name = 'libzstd.dll'
-    
-    # PyInstaller 打包后，附加文件在 _MEIPASS 下
     base = getattr(sys, '_MEIPASS', os.path.dirname(__file__))
-    
-    search_paths = [
+    for p in [
         os.path.join(base, dll_name),
         os.path.join(os.getcwd(), dll_name),
-        # 常见安装路径
-        os.path.expandvars(r'%LOCALAPPDATA%\Logseq\app-0.10.9\resources\app\node_modules\dugite\git\mingw64\bin\libzstd.dll'),
-        os.path.expandvars(r'%USERPROFILE%\AppData\Local\Logseq\app-0.10.9\resources\app\node_modules\dugite\git\mingw64\bin\libzstd.dll'),
-    ]
-    for p in search_paths:
+    ]:
         if os.path.exists(p):
             try:
                 dll = ctypes.CDLL(p)
-                dll.ZSTD_versionNumber.restype = c_int
-                ver = dll.ZSTD_versionNumber()
                 return dll, p
             except:
                 continue
     return None, None
 
 
-def zstd_decompress(dll, data):
+def zstd_decompress(zstd_obj, data):
     """zstd 解压"""
-    dst_size = 100 * 1024 * 1024
-    dst = create_string_buffer(dst_size)
-    dll.ZSTD_decompress.restype = c_size_t
-    result = dll.ZSTD_decompress(dst, dst_size, data, len(data))
-    if dll.ZSTD_isError(result):
-        err = dll.ZSTD_getErrorName(result)
-        raise RuntimeError(f'zstd 解压失败: {err.decode()}')
-    return dst.raw[:result]
+    import zstandard as _zs
+    if hasattr(zstd_obj, 'decompress'):
+        # Python 包
+        return zstd_obj.decompress(data)
+    else:
+        # ctypes DLL
+        _dll = zstd_obj
+        dst_size = max(len(data) * 50, 100 * 1024 * 1024)
+        dst = create_string_buffer(dst_size)
+        _dll.ZSTD_decompress.restype = c_size_t
+        result = _dll.ZSTD_decompress(dst, dst_size, data, len(data))
+        if _dll.ZSTD_isError(result):
+            err = _dll.ZSTD_getErrorName(result)
+            raise RuntimeError(f'zstd 解压失败: {err.decode()}')
+        return dst.raw[:result]
 
 
-def zstd_compress(dll, data, level=3):
+def zstd_compress(zstd_obj, data, level=3):
     """zstd 压缩"""
-    dst_size = len(data) + 1024 * 1024
-    dst = create_string_buffer(dst_size)
-    dll.ZSTD_compress.restype = c_size_t
-    result = dll.ZSTD_compress(dst, dst_size, data, len(data), level)
-    if dll.ZSTD_isError(result):
-        err = dll.ZSTD_getErrorName(result)
-        raise RuntimeError(f'zstd 压缩失败: {err.decode()}')
-    return dst.raw[:result]
+    import zstandard as _zs
+    if hasattr(zstd_obj, 'compress'):
+        # Python 包
+        return zstd_obj.compress(data, level)
+    else:
+        # ctypes DLL
+        _dll = zstd_obj
+        dst_size = len(data) + 1024 * 1024
+        dst = create_string_buffer(dst_size)
+        _dll.ZSTD_compress.restype = c_size_t
+        result = _dll.ZSTD_compress(dst, dst_size, data, len(data), level)
+        if _dll.ZSTD_isError(result):
+            err = _dll.ZSTD_getErrorName(result)
+            raise RuntimeError(f'zstd 压缩失败: {err.decode()}')
+        return dst.raw[:result]
 
 
 # ── 清理引擎 ──────────────────────────────────────────────
@@ -384,7 +398,13 @@ class AnkiCleanerApp:
         self.extract_status.pack(side='left', padx=(8, 0))
 
         # zstd 状态
-        zstd_text = f'libzstd.dll: {"✅ 已加载" if self.zstd_dll else "⚠️ 未找到（仅支持旧版 apkg）"}'
+        if self.zstd_dll:
+            if self.zstd_path == 'python':
+                zstd_text = 'zstandard: ✅ Python 包'
+            else:
+                zstd_text = f'libzstd.dll: ✅ {os.path.basename(self.zstd_path)}'
+        else:
+            zstd_text = '⚠️ zstd 不可用（仅支持旧版 apkg）'
         ttk.Label(frame1, text=zstd_text, foreground='gray', font=('', 9)).pack(anchor='w', pady=(4, 0))
 
         # ── 步骤 2: 清理选项 ──
