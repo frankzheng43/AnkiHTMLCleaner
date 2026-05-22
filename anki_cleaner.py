@@ -1,132 +1,32 @@
 """
-Anki Apkg 清理工具 — 图形界面版
-纯 tkinter + sqlite3 + zipfile，零额外 Python 依赖
-zstd 解压依赖 libzstd.dll（300 KB，同目录或系统 PATH）
+Anki Apkg 清理工具 — 三标签页版
+仅支持旧版 apkg（collection.anki2，无 zstd 压缩）
 """
-
-import os
-import sys
-
-# 修复 sqlite3 DLL 搜索路径（打包 exe 后不需要，仅源码运行时）
-if hasattr(os, 'add_dll_directory'):
-    for _p in [
-        os.path.join(os.path.dirname(sys.executable), 'Library', 'bin'),
-        os.path.join(os.path.dirname(sys.executable), 'DLLs'),
-        r'F:\Software\Anaconda\Library\bin',
-    ]:
-        if os.path.isdir(_p):
-            try:
-                os.add_dll_directory(_p)
-            except:
-                pass
 
 import tkinter as tk
 from tkinter import ttk, filedialog, messagebox
 import zipfile
+import sqlite3
+import os
 import re
 import html
 import shutil
-import struct
-import ctypes
-import threading
 import tempfile
-from ctypes import c_char_p, c_int, c_void_p, c_size_t, c_uint64, POINTER, byref, create_string_buffer
+import threading
+import struct
 
-# sqlite3 延迟导入（因为 DLL 路径修复后才能加载）
-_sqlite3 = None
-def _get_sqlite3():
-    global _sqlite3
-    if _sqlite3 is None:
-        import sqlite3
-        _sqlite3 = sqlite3
-    return _sqlite3
-
-# ── zstd ──────────────────────────────────────────────
-
-def load_zstd():
-    """尝试加载 zstd（优先用 zstandard 包，回退到 ctypes+DLL）"""
-    try:
-        import zstandard as _zs
-        # 验证可用
-        _zs.decompress(b'')
-        return _zs, 'python'
-    except:
-        pass
-    
-    # 回退：ctypes + libzstd.dll
-    dll_name = 'libzstd.dll'
-    base = getattr(sys, '_MEIPASS', os.path.dirname(__file__))
-    for p in [
-        os.path.join(base, dll_name),
-        os.path.join(os.getcwd(), dll_name),
-    ]:
-        if os.path.exists(p):
-            try:
-                dll = ctypes.CDLL(p)
-                return dll, p
-            except:
-                continue
-    return None, None
-
-
-def zstd_decompress(zstd_obj, data):
-    """zstd 解压"""
-    import zstandard as _zs
-    if hasattr(zstd_obj, 'decompress'):
-        # Python 包
-        return zstd_obj.decompress(data)
-    else:
-        # ctypes DLL
-        _dll = zstd_obj
-        dst_size = max(len(data) * 50, 100 * 1024 * 1024)
-        dst = create_string_buffer(dst_size)
-        _dll.ZSTD_decompress.restype = c_size_t
-        result = _dll.ZSTD_decompress(dst, dst_size, data, len(data))
-        if _dll.ZSTD_isError(result):
-            err = _dll.ZSTD_getErrorName(result)
-            raise RuntimeError(f'zstd 解压失败: {err.decode()}')
-        return dst.raw[:result]
-
-
-def zstd_compress(zstd_obj, data, level=3):
-    """zstd 压缩"""
-    import zstandard as _zs
-    if hasattr(zstd_obj, 'compress'):
-        # Python 包
-        return zstd_obj.compress(data, level)
-    else:
-        # ctypes DLL
-        _dll = zstd_obj
-        dst_size = len(data) + 1024 * 1024
-        dst = create_string_buffer(dst_size)
-        _dll.ZSTD_compress.restype = c_size_t
-        result = _dll.ZSTD_compress(dst, dst_size, data, len(data), level)
-        if _dll.ZSTD_isError(result):
-            err = _dll.ZSTD_getErrorName(result)
-            raise RuntimeError(f'zstd 压缩失败: {err.decode()}')
-        return dst.raw[:result]
+# zstd 支持（可选）
+try:
+    import zstandard as _zstd
+    ZSTD_AVAILABLE = True
+except ImportError:
+    ZSTD_AVAILABLE = False
 
 
 # ── 清理引擎 ──────────────────────────────────────────────
 
 class CleanEngine:
     def __init__(self, config):
-        """
-        config: dict
-            rm_style        - 删除 style 属性
-            rm_class        - 删除 class 属性
-            rm_span         - 删除 <span>
-            rm_tbody        - 删除 <tbody>
-            p_to_br         - <p> 转 <br>
-            unescape        - HTML 实体转字符
-            rm_crap         - 清除 _x000D_ 和注释
-            collapse_br     - 多个 <br> 缩成一个
-            trim_br         - 去掉首尾无意义 <br>
-            table_border    - 表格加黑框
-            rm_cjk_space    - 删中文间多余空格
-            add_cjk_space   - 中文与英文/数字间加空格
-            custom_regex    - [(查找, 替换), ...]
-        """
         self.config = config
 
     def clean(self, text):
@@ -139,213 +39,202 @@ class CleanEngine:
         if self.config.get('rm_class'):
             text = re.sub(r'\s+class\s*=\s*"[^"]*"', '', text)
             text = re.sub(r"\s+class\s*=\s*'[^']*'", '', text)
-
         if self.config.get('rm_span'):
             text = re.sub(r'</?span\b[^>]*>', '', text)
         if self.config.get('rm_tbody'):
             text = re.sub(r'</?tbody\b[^>]*>', '', text)
-
         if self.config.get('p_to_br'):
             text = re.sub(r'<p\b[^>]*>', '', text)
             text = re.sub(r'</p\s*>', '<br>', text)
-
         if self.config.get('unescape'):
             text = html.unescape(text)
-
         if self.config.get('rm_crap'):
             text = text.replace('_x000D_', '')
             text = text.replace('\r', '')
             text = re.sub(r'<!--.*?-->', '', text)
-
         if self.config.get('collapse_br'):
             text = re.sub(r'(<br\s*/?\s*>\s*){2,}', r'\1', text)
-
         if self.config.get('trim_br'):
             text = re.sub(r'^\s*<br\s*/?\s*>', '', text)
             text = re.sub(r'<br\s*/?\s*>\s*$', '', text)
             text = re.sub(r'(<div\b[^>]*>)\s*<br\s*/?\s*>', r'\1', text)
             text = re.sub(r'<br\s*/?\s*>\s*</div\s*>', '</div>', text)
-
         if self.config.get('table_border'):
             if re.search(r'<table\b', text) and not re.search(r'<table\b[^>]*\bborder\s*=', text):
                 text = re.sub(r'<table\b', '<table border="1" style="border-collapse: collapse"', text)
-
         if self.config.get('rm_cjk_space'):
             cjk = r'[\u4e00-\u9fff\u3400-\u4dbf\uf900-\ufaff]'
             text = re.sub(f'({cjk})\\s+({cjk})', r'\1\2', text)
-
         if self.config.get('add_cjk_space'):
             cjk = r'[\u4e00-\u9fff\u3400-\u4dbf\uf900-\ufaff]'
             text = re.sub(f'({cjk})([a-zA-Z])', r'\1 \2', text)
             text = re.sub(f'([a-zA-Z])({cjk})', r'\1 \2', text)
             text = re.sub(f'({cjk})(\\d)', r'\1 \2', text)
             text = re.sub(f'(\\d)({cjk})', r'\1 \2', text)
-
-        # 自定义正则
         for find, replace in self.config.get('custom_regex', []):
             try:
                 text = re.sub(find, replace, text)
             except:
                 pass
-
-        # 收尾：多个空格缩成一个
         text = re.sub(r'  +', ' ', text)
         return text.strip()
 
 
-# ── Apkg 处理 ──────────────────────────────────────────────
+# ── Apkg 处理器（仅旧版：zip → *.anki2 → sqlite） ──
 
 class ApkgProcessor:
-    def __init__(self, zstd_dll):
-        self.zstd = zstd_dll
+    def __init__(self):
         self.temp_dir = None
-        self.db_path = None
-        self._field_cache = {}
+        self.db_path = None       # 原始数据库路径
+        self.cleaned_db = None    # 清理后的数据库路径
+        self.media_files = []     # apkg 中的媒体文件列表
+        self.note_count = 0
+        self.notetypes = []       # [(id, name, [字段名])]
+        self.original_apkg = None
 
-    def open(self, apkg_path, progress_callback=None):
-        """解压 apkg + zstd 解压数据库，返回 True/False"""
-        self.temp_dir = tempfile.mkdtemp(prefix='anki_clean_')
-        
-        try:
-            # 1. 解压 zip
-            with zipfile.ZipFile(apkg_path, 'r') as zf:
-                zf.extractall(self.temp_dir)
-            if progress_callback:
-                progress_callback('✓ 已解压 apkg (ZIP)')
+    def extract(self, apkg_path, log_callback=None):
+        """解压 apkg（zip），支持旧版 anki2 和新版 zstd 压缩的 anki21b"""
+        self.original_apkg = apkg_path
+        self.temp_dir = tempfile.mkdtemp(prefix='anki_')
 
-            # 2. 找到数据库文件
-            db_files = [f for f in os.listdir(self.temp_dir) if f.startswith('collection.anki2')]
-            if not db_files:
-                raise RuntimeError('未找到 collection.anki2* 数据库文件')
-            
-            db_file = db_files[0]  # 优先用 anki21b
-            
-            if db_file.endswith('anki21b') and self.zstd:
-                # zstd 解压
-                with open(os.path.join(self.temp_dir, db_file), 'rb') as f:
-                    compressed = f.read()
-                
-                # 检查魔数
-                if compressed[:4] == b'\x28\xb5\x2f\xfd':
-                    decompressed = zstd_decompress(self.zstd, compressed)
-                    self.db_path = os.path.join(self.temp_dir, 'decompressed.sqlite')
-                    with open(self.db_path, 'wb') as f:
-                        f.write(decompressed)
-                    if progress_callback:
-                        progress_callback(f'✓ zstd 解压完成 ({len(decompressed)/1024:.0f} KB)')
-                else:
-                    # 不是 zstd 格式，直接当 SQLite 用
-                    self.db_path = os.path.join(self.temp_dir, db_file)
-                    if progress_callback:
-                        progress_callback('✓ 数据库无需 zstd 解压')
-            else:
-                # 普通 SQLite
-                self.db_path = os.path.join(self.temp_dir, db_file)
-                if progress_callback:
-                    progress_callback('✓ 数据库文件已就绪')
+        # 1. 解压 zip
+        with zipfile.ZipFile(apkg_path, 'r') as zf:
+            names = zf.namelist()
+            db_candidates = [n for n in names if n.startswith('collection.anki') and not n.endswith('.bak')]
+            if not db_candidates:
+                raise RuntimeError('未找到 collection.anki* 文件')
+            self.media_files = [n for n in names if not n.startswith('collection.anki')]
+            zf.extractall(self.temp_dir)
 
-            # 3. 读取笔记类型信息
-            self._load_notetypes()
-            return True
+        db_name = db_candidates[0]
+        db_path = os.path.join(self.temp_dir, db_name)
 
-        except Exception as e:
-            self.cleanup()
-            raise
+        # 2. 检查是否 zstd 压缩（魔数 0x28b52ffd）
+        is_zstd = False
+        with open(db_path, 'rb') as f:
+            magic = f.read(4)
+        if magic == b'\x28\xb5\x2f\xfd':
+            is_zstd = True
 
-    def _load_notetypes(self):
-        conn = _get_sqlite3().connect(self.db_path)
+        if is_zstd:
+            if not ZSTD_AVAILABLE:
+                raise RuntimeError(
+                    '新版 apkg（zstd 压缩）需要安装 zstandard 包\n'
+                    '请运行: pip install zstandard')
+
+            with open(db_path, 'rb') as f:
+                compressed = f.read()
+            dctx = _zstd.ZstdDecompressor()
+            decompressed = dctx.decompress(compressed, max_output_size=100 * 1024 * 1024)
+            self.db_path = os.path.join(self.temp_dir, 'decompressed.sqlite')
+            with open(self.db_path, 'wb') as f:
+                f.write(decompressed)
+            if log_callback:
+                log_callback(f'   zstd 解压: {len(compressed)/1024:.0f} KB → {len(decompressed)/1024:.0f} KB')
+        else:
+            self.db_path = db_path
+
+        # 3. 读取笔记信息
+        self._load_info()
+
+        if log_callback:
+            log_callback(f'✅ 已解压: {os.path.basename(apkg_path)}')
+            log_callback(f'   数据库: {db_name}')
+            log_callback(f'   媒体文件: {len(self.media_files)} 个')
+            log_callback(f'   笔记: {self.note_count} 条')
+            for _, name, fields in self.notetypes:
+                log_callback(f'   📝 {name}: {fields}')
+
+    def _load_info(self):
+        conn = sqlite3.connect(self.db_path)
         cur = conn.cursor()
-        
-        # 获取笔记类型和字段名
+        self.note_count = cur.execute("SELECT COUNT(*) FROM notes").fetchone()[0]
         try:
             cur.execute("SELECT id, name FROM notetypes")
-            ntypes = cur.fetchall()
-            for nid, name in ntypes:
+            for nid, name in cur.fetchall():
                 cur.execute("SELECT name FROM fields WHERE ntid = ? ORDER BY ord", (nid,))
-                fields = [r[0] for r in cur.fetchall()]
-                self._field_cache[nid] = {'name': name, 'fields': fields}
+                self.notetypes.append((nid, name, [r[0] for r in cur.fetchall()]))
         except:
-            # 兼容旧版 schema
             pass
-        
         conn.close()
 
-    def get_notetypes(self):
-        """返回 [(id, name, [field_names]), ...]"""
-        result = []
-        for nid, info in self._field_cache.items():
-            result.append((nid, info['name'], info['fields']))
-        return result
+    def clean(self, engine, log_callback=None):
+        """对数据库执行清理，生成 cleaned_db"""
+        if not self.db_path:
+            raise RuntimeError('请先解压 apkg')
 
-    def get_note_count(self):
-        conn = _get_sqlite3().connect(self.db_path)
-        cnt = conn.execute('SELECT COUNT(*) FROM notes').fetchone()[0]
-        conn.close()
-        return cnt
-
-    def process(self, engine, target_fields=None, progress_callback=None):
-        conn = _get_sqlite3().connect(self.db_path)
+        conn = sqlite3.connect(self.db_path)
         cur = conn.cursor()
-        
         rows = cur.execute("SELECT id, mid, flds FROM notes").fetchall()
         total = len(rows)
-        
+
         for idx, (note_id, mid, flds) in enumerate(rows):
-            if progress_callback and idx % 100 == 0:
-                progress_callback(f'⏳ 清理中... {idx}/{total}')
-            
+            if log_callback and idx % 200 == 0:
+                log_callback(f'⏳ 清理中... {idx}/{total}')
+
             fields = flds.split('\x1f')
             changed = False
-            
             for fi in range(len(fields)):
-                if target_fields and (mid, fi) not in target_fields:
-                    continue
-                
                 cleaned = engine.clean(fields[fi])
                 if cleaned != fields[fi]:
                     fields[fi] = cleaned
                     changed = True
-            
             if changed:
-                new_flds = '\x1f'.join(fields)
-                cur.execute("UPDATE notes SET flds = ? WHERE id = ?", (new_flds, note_id))
-        
+                cur.execute("UPDATE notes SET flds = ? WHERE id = ?", ('\x1f'.join(fields), note_id))
+
         conn.commit()
         conn.close()
-        
-        if progress_callback:
-            progress_callback(f'✓ 清理完成，共处理 {total} 条笔记')
 
-    def repack(self, output_path, progress_callback=None):
-        """压缩数据库 + 重新打包 apkg"""
-        # 1. 重新压缩数据库 (zstd)
-        db_data = open(self.db_path, 'rb').read()
-        
-        if self.zstd:
-            compressed = zstd_compress(self.zstd, db_data)
-            db_out_name = 'collection.anki21b'
+        # 生成清理版副本
+        self.cleaned_db = os.path.join(self.temp_dir, 'collection.cleaned.anki2')
+        shutil.copy2(self.db_path, self.cleaned_db)
+
+        if log_callback:
+            log_callback(f'✅ 清理完成: {total} 条笔记')
+
+    def repack(self, output_path, log_callback=None):
+        """打包清理后的数据库 + 媒体文件 → apkg（自动匹配原格式）"""
+        if not self.cleaned_db:
+            raise RuntimeError('请先执行清理')
+
+        # 读取清理后的数据库
+        with open(self.cleaned_db, 'rb') as f:
+            db_data = f.read()
+
+        # 根据原文件决定是否 zstd 压缩
+        orig_name = os.path.basename(self.db_path)
+        if orig_name.endswith('anki21b') and ZSTD_AVAILABLE:
+            cctx = _zstd.ZstdCompressor(level=3)
+            db_data = cctx.compress(db_data)
+            out_name = 'collection.anki21b'
+            if log_callback:
+                log_callback(f'   zstd 压缩: {len(db_data)/1024:.0f} KB')
         else:
-            compressed = db_data
-            db_out_name = 'collection.anki2'
-        
-        # 2. 打包 zip
+            out_name = orig_name or 'collection.anki2'
+
+        # 写入临时文件
+        tmp_db = os.path.join(self.temp_dir, 'out_' + out_name)
+        with open(tmp_db, 'wb') as f:
+            f.write(db_data)
+
         with zipfile.ZipFile(output_path, 'w', zipfile.ZIP_DEFLATED) as zf:
-            for fname in os.listdir(self.temp_dir):
+            zf.write(tmp_db, out_name)
+            for fname in self.media_files:
                 fpath = os.path.join(self.temp_dir, fname)
-                if fname == 'decompressed.sqlite' or fname.startswith('collection.anki'):
-                    continue
-                zf.write(fpath, fname)
-            
-            # 写入处理后的数据库
-            tmp_db = os.path.join(self.temp_dir, db_out_name)
-            with open(tmp_db, 'wb') as f:
-                f.write(compressed)
-            zf.write(tmp_db, db_out_name)
-            os.remove(tmp_db)
-        
-        if progress_callback:
-            size = os.path.getsize(output_path) / (1024 * 1024)
-            progress_callback(f'✓ 已输出: {os.path.basename(output_path)} ({size:.1f} MB)')
+                if os.path.exists(fpath):
+                    zf.write(fpath, fname)
+        os.remove(tmp_db)
+
+        if log_callback:
+            size = os.path.getsize(output_path) / 1024
+            log_callback(f'✅ 已打包: {os.path.basename(output_path)} ({size:.0f} KB)')
+
+    def export_db(self, src_path, dst_path):
+        """导出中间数据库"""
+        if os.path.exists(src_path):
+            shutil.copy2(src_path, dst_path)
+            return os.path.getsize(dst_path)
+        return 0
 
     def cleanup(self):
         if self.temp_dir and os.path.exists(self.temp_dir):
@@ -359,270 +248,286 @@ class AnkiCleanerApp:
     def __init__(self):
         self.root = tk.Tk()
         self.root.title('Anki Apkg 清理工具')
-        self.root.geometry('720x760')
-        self.root.minsize(640, 680)
-        
-        # 加载 zstd
-        self.zstd_dll, self.zstd_path = load_zstd()
-        
-        # 处理器
-        self.processor = None
-        
+        self.root.geometry('760x700')
+        self.root.minsize(640, 600)
+
+        self.processor = ApkgProcessor()
+        self.config = {}  # 当前清理配置
+
         self._build_ui()
-        
-        # 默认勾选
-        self._set_defaults()
 
     def _build_ui(self):
-        main = ttk.Frame(self.root, padding=16)
+        main = ttk.Frame(self.root, padding=12)
         main.pack(fill='both', expand=True)
 
-        # ── 标题 ──
-        ttk.Label(main, text='Anki Apkg 清理工具', font=('', 16, 'bold')).pack(anchor='w')
-        ttk.Label(main, text='解包 → 清理 → 打包，三步完成', foreground='gray').pack(anchor='w', pady=(0, 12))
+        # 标题
+        ttk.Label(main, text='Anki Apkg 清理工具', font=('', 15, 'bold')).pack(anchor='w')
+        ttk.Label(main, text='解压 → 清理 → 打包，三步完成', foreground='gray').pack(anchor='w', pady=(0, 8))
 
-        # ── 步骤 1: 文件选择 ──
-        frame1 = ttk.LabelFrame(main, text='步骤 1：选择 apkg 文件', padding=8)
-        frame1.pack(fill='x', pady=(0, 8))
-        
-        row1 = ttk.Frame(frame1)
-        row1.pack(fill='x')
-        self.file_path = tk.StringVar()
-        ttk.Entry(row1, textvariable=self.file_path).pack(side='left', fill='x', expand=True)
-        ttk.Button(row1, text='浏览', command=self._browse_file, width=8).pack(side='right', padx=(4, 0))
-        
-        row1b = ttk.Frame(frame1)
-        row1b.pack(fill='x', pady=(4, 0))
-        ttk.Button(row1b, text='① 提取 apkg', command=self._do_extract).pack(side='left')
-        self.extract_status = ttk.Label(row1b, text='', foreground='gray')
-        self.extract_status.pack(side='left', padx=(8, 0))
+        # 笔记本（三标签）
+        self.notebook = ttk.Notebook(main)
+        self.notebook.pack(fill='both', expand=True)
 
-        # zstd 状态
-        if self.zstd_dll:
-            if self.zstd_path == 'python':
-                zstd_text = 'zstandard: ✅ Python 包'
-            else:
-                zstd_text = f'libzstd.dll: ✅ {os.path.basename(self.zstd_path)}'
-        else:
-            zstd_text = '⚠️ zstd 不可用（仅支持旧版 apkg）'
-        ttk.Label(frame1, text=zstd_text, foreground='gray', font=('', 9)).pack(anchor='w', pady=(4, 0))
+        self._build_tab1()  # 解压
+        self._build_tab2()  # 清理
+        self._build_tab3()  # 打包
 
-        # ── 步骤 2: 清理选项 ──
-        frame2 = ttk.LabelFrame(main, text='步骤 2：选择清理项目', padding=8)
-        frame2.pack(fill='both', expand=True, pady=(0, 8))
+        # 状态栏
+        self.status = ttk.Label(main, text='就绪', relief='sunken', anchor='w')
+        self.status.pack(fill='x', pady=(6, 0))
 
-        canvas = tk.Canvas(frame2, highlightthickness=0)
-        scrollbar = ttk.Scrollbar(frame2, orient='vertical', command=canvas.yview)
-        scroll_frame = ttk.Frame(canvas)
+    # ── Tab 1: 解压 ──
+
+    def _build_tab1(self):
+        tab = ttk.Frame(self.notebook, padding=12)
+        self.notebook.add(tab, text='① 解压')
+
+        # 文件选择
+        ttk.Label(tab, text='选择 apkg 文件：').pack(anchor='w')
+        row = ttk.Frame(tab)
+        row.pack(fill='x', pady=(4, 8))
+        self.file_var = tk.StringVar()
+        ttk.Entry(row, textvariable=self.file_var).pack(side='left', fill='x', expand=True)
+        ttk.Button(row, text='浏览', command=self._browse_apkg, width=8).pack(side='right', padx=(4, 0))
+
+        # 按钮行
+        btn_row = ttk.Frame(tab)
+        btn_row.pack(fill='x')
+        self.btn_extract = ttk.Button(btn_row, text='解压', command=self._do_extract)
+        self.btn_extract.pack(side='left')
+        self.btn_export1 = ttk.Button(btn_row, text='导出 SQLite', command=self._export_raw_db, state='disabled')
+        self.btn_export1.pack(side='left', padx=(8, 0))
+
+        # 信息展示
+        self.info1 = tk.Text(tab, height=8, state='disabled', wrap='word', bg='#f5f5f5')
+        self.info1.pack(fill='both', expand=True, pady=(8, 0))
+
+        # 切换到下一步的提示
+        self.tab1_status = ttk.Label(tab, text='', foreground='gray')
+        self.tab1_status.pack(anchor='w', pady=(4, 0))
+
+    def _browse_apkg(self):
+        path = filedialog.askopenfilename(
+            title='选择 apkg 文件',
+            filetypes=[('Anki 牌组', '*.apkg'), ('所有文件', '*.*')])
+        if path:
+            self.file_var.set(path)
+
+    def _log_info(self, widget, msg):
+        widget.configure(state='normal')
+        widget.insert('end', msg + '\n')
+        widget.see('end')
+        widget.configure(state='disabled')
+        self.root.update()
+
+    def _do_extract(self):
+        path = self.file_var.get()
+        if not path:
+            messagebox.showwarning('提示', '请先选择 apkg 文件')
+            return
+
+        self.btn_extract.configure(state='disabled')
+        self._log_info(self.info1, '⏳ 正在解压...')
+
+        def task():
+            try:
+                self.processor = ApkgProcessor()
+                self.processor.extract(path, lambda m: self._log_info(self.info1, m))
+                self.btn_export1.configure(state='normal')
+                self.tab1_status.configure(
+                    text=f'✅ 已解压 {self.processor.note_count} 条笔记，可进入下一步',
+                    foreground='green')
+            except Exception as e:
+                self._log_info(self.info1, f'❌ 失败: {e}')
+                self.tab1_status.configure(text=f'❌ 解压失败', foreground='red')
+            finally:
+                self.btn_extract.configure(state='normal')
+
+        threading.Thread(target=task, daemon=True).start()
+
+    def _export_raw_db(self):
+        if not self.processor or not self.processor.db_path:
+            return
+        path = filedialog.asksaveasfilename(
+            title='导出原始 SQLite',
+            defaultextension='.anki2',
+            filetypes=[('SQLite 数据库', '*.anki2;*.sqlite'), ('所有文件', '*.*')])
+        if path:
+            size = self.processor.export_db(self.processor.db_path, path)
+            self._log_info(self.info1, f'📦 已导出: {os.path.basename(path)} ({size/1024:.0f} KB)')
+
+    # ── Tab 2: 清理 ──
+
+    def _build_tab2(self):
+        tab = ttk.Frame(self.notebook, padding=12)
+        self.notebook.add(tab, text='② 清理')
+
+        # 可滚动区域
+        canvas = tk.Canvas(tab, highlightthickness=0)
+        scrollbar = ttk.Scrollbar(tab, orient='vertical', command=canvas.yview)
+        frame = ttk.Frame(canvas)
 
         canvas.bind('<Configure>', lambda e: canvas.itemconfig(1, width=e.width))
-        scroll_frame.bind('<Configure>', lambda e: canvas.configure(scrollregion=canvas.bbox('all')))
-        canvas.create_window((0, 0), window=scroll_frame, anchor='nw', width=canvas.winfo_reqwidth())
+        frame.bind('<Configure>', lambda e: canvas.configure(scrollregion=canvas.bbox('all')))
+        canvas.create_window((0, 0), window=frame, anchor='nw')
         canvas.configure(yscrollcommand=scrollbar.set)
 
         canvas.pack(side='left', fill='both', expand=True)
         scrollbar.pack(side='right', fill='y')
 
-        # 绑定鼠标滚轮
         def _on_mousewheel(event):
             canvas.yview_scroll(int(-1 * (event.delta / 120)), 'units')
         canvas.bind_all('<MouseWheel>', _on_mousewheel)
 
+        # 清理选项
         self.checks = {}
-
-        # 清理选项定义
         options = [
             ('rm_style',      '删除 style 属性',         '清除所有标签上的 style="..."'),
             ('rm_class',      '删除 class 属性',         '清除所有标签上的 class="..."'),
             ('rm_span',       '删除 <span> 标签',        '无显示效果，仅保留内容'),
             ('rm_tbody',      '删除 <tbody> 标签',       '浏览器会自动插入'),
             ('p_to_br',       '<p> 转 <br>',             '<p>段落</p> → 段落<br>'),
-            ('unescape',      'HTML 实体转字符',         '&times; → ×, &divide; → ÷, &nbsp; → 空格'),
+            ('unescape',      'HTML 实体转字符',         '&times; → ×, &divide; → ÷'),
             ('rm_crap',       '清除 _x000D_ 和注释',     'Windows 换行残留和 HTML 注释'),
             ('collapse_br',   '多个 <br> 缩成一个',      '<br><br> → <br>'),
             ('trim_br',       '去掉首尾无意义 <br>',      '段首段尾及 <div> 前后的 <br>'),
             ('table_border',  '表格加默认黑边框',        '<table> → <table border="1">'),
             ('rm_cjk_space',  '删中文间多余空格',        '增值税 一般 → 增值税一般'),
-            ('add_cjk_space', '中文与英/数间加空格',      '2025年 → 2025 年, A股 → A 股'),
+            ('add_cjk_space', '中文与英/数间加空格',      '2025年 → 2025 年'),
         ]
-
         for key, label, desc in options:
             var = tk.BooleanVar(value=True)
-            f = ttk.Frame(scroll_frame)
+            f = ttk.Frame(frame)
             f.pack(fill='x', pady=1)
             cb = ttk.Checkbutton(f, text=label, variable=var)
             cb.pack(side='left')
             ttk.Label(f, text=desc, foreground='gray', font=('', 9)).pack(side='left', padx=(8, 0))
             self.checks[key] = var
 
-        # ── 自定义正则 ──
-        sep = ttk.Separator(scroll_frame, orient='horizontal')
+        # 自定义正则
+        sep = ttk.Separator(frame, orient='horizontal')
         sep.pack(fill='x', pady=6)
+        ttk.Label(frame, text='自定义查找替换（可选）', font=('', 9, 'bold')).pack(anchor='w')
 
-        ttk.Label(scroll_frame, text='☐ 自定义查找替换（可选）', font=('', 9, 'bold')).pack(anchor='w')
-        
         self.custom_var = tk.BooleanVar(value=False)
-        ttk.Checkbutton(scroll_frame, text='启用自定义正则', variable=self.custom_var).pack(anchor='w')
+        ttk.Checkbutton(frame, text='启用自定义正则', variable=self.custom_var).pack(anchor='w')
 
-        reg_frame = ttk.Frame(scroll_frame)
-        reg_frame.pack(fill='x', pady=(4, 0))
-        ttk.Label(reg_frame, text='查找:').grid(row=0, column=0, sticky='w')
-        self.regex_find = tk.StringVar()
-        ttk.Entry(reg_frame, textvariable=self.regex_find).grid(row=0, column=1, sticky='ew', padx=(4, 0))
-        
-        ttk.Label(reg_frame, text='替换:').grid(row=1, column=0, sticky='w', pady=(4, 0))
-        self.regex_replace = tk.StringVar()
-        ttk.Entry(reg_frame, textvariable=self.regex_replace).grid(row=1, column=1, sticky='ew', padx=(4, 0), pady=(4, 0))
-        reg_frame.columnconfigure(1, weight=1)
+        reg_f = ttk.Frame(frame)
+        reg_f.pack(fill='x', pady=(4, 0))
+        ttk.Label(reg_f, text='查找:').grid(row=0, column=0, sticky='w')
+        self.re_find = tk.StringVar()
+        ttk.Entry(reg_f, textvariable=self.re_find).grid(row=0, column=1, sticky='ew', padx=(4, 0))
+        ttk.Label(reg_f, text='替换:').grid(row=1, column=0, sticky='w', pady=(4, 0))
+        self.re_repl = tk.StringVar()
+        ttk.Entry(reg_f, textvariable=self.re_repl).grid(row=1, column=1, sticky='ew', padx=(4, 0), pady=(4, 0))
+        reg_f.columnconfigure(1, weight=1)
 
-        # ── 步骤 3: 输出 ──
-        frame3 = ttk.LabelFrame(main, text='步骤 3：输出', padding=8)
-        frame3.pack(fill='x', pady=(0, 8))
+        # 按钮
+        btn_row = ttk.Frame(tab)
+        btn_row.pack(fill='x', pady=(6, 0))
+        self.btn_clean = ttk.Button(btn_row, text='▶ 开始清理', command=self._do_clean)
+        self.btn_clean.pack(side='left')
+        self.btn_export2 = ttk.Button(btn_row, text='导出已清理 SQLite', command=self._export_cleaned_db, state='disabled')
+        self.btn_export2.pack(side='left', padx=(8, 0))
 
-        row3 = ttk.Frame(frame3)
-        row3.pack(fill='x')
-        self.output_path = tk.StringVar()
-        ttk.Entry(row3, textvariable=self.output_path).pack(side='left', fill='x', expand=True)
-        ttk.Button(row3, text='浏览', command=self._browse_output, width=8).pack(side='right', padx=(4, 0))
+        self.info2 = tk.Text(tab, height=5, state='disabled', wrap='word', bg='#f5f5f5')
+        self.info2.pack(fill='x', pady=(6, 0))
 
-        # ── 开始按钮 ──
-        self.run_btn = ttk.Button(main, text='▶ 开始处理', command=self._run, style='Accent.TButton')
-        self.run_btn.pack(pady=(0, 8))
+    def _do_clean(self):
+        if not self.processor or not self.processor.db_path:
+            messagebox.showwarning('提示', '请先在 "① 解压" 中解压 apkg')
+            return
 
-        # ── 日志 ──
-        self.log_text = tk.Text(main, height=10, state='disabled', wrap='word')
-        self.log_text.pack(fill='both', expand=True)
-        
-        scroll_log = ttk.Scrollbar(main, orient='vertical', command=self.log_text.yview)
-        scroll_log.pack(side='right', fill='y')
-        self.log_text.configure(yscrollcommand=scroll_log.set)
+        # 收集配置
+        self.config = {k: v.get() for k, v in self.checks.items()}
+        self.config['custom_regex'] = []
+        if self.custom_var.get() and self.re_find.get():
+            self.config['custom_regex'].append((self.re_find.get(), self.re_repl.get()))
 
-    def _set_defaults(self):
-        for key in ['rm_style', 'rm_class', 'rm_span', 'rm_tbody', 'p_to_br',
-                     'unescape', 'rm_crap', 'collapse_br', 'trim_br',
-                     'table_border', 'rm_cjk_space', 'add_cjk_space']:
-            if key in self.checks:
-                self.checks[key].set(True)
+        engine = CleanEngine(self.config)
+        self.btn_clean.configure(state='disabled')
+        self._log_info(self.info2, '⏳ 正在清理...')
 
-    def _browse_file(self):
-        path = filedialog.askopenfilename(
-            title='选择 apkg 文件',
-            filetypes=[('Anki 牌组', '*.apkg'), ('所有文件', '*.*')]
-        )
+        def task():
+            try:
+                self.processor.clean(engine, lambda m: self._log_info(self.info2, m))
+                self.btn_export2.configure(state='normal')
+                self._log_info(self.info2, '💡 可进入 "③ 打包" 生成 apkg，或点击导出按钮保存中间文件')
+            except Exception as e:
+                self._log_info(self.info2, f'❌ 失败: {e}')
+            finally:
+                self.btn_clean.configure(state='normal')
+
+        threading.Thread(target=task, daemon=True).start()
+
+    def _export_cleaned_db(self):
+        if not self.processor or not self.processor.cleaned_db:
+            return
+        path = filedialog.asksaveasfilename(
+            title='导出清理后的 SQLite',
+            defaultextension='.anki2',
+            filetypes=[('SQLite 数据库', '*.anki2;*.sqlite'), ('所有文件', '*.*')])
         if path:
-            self.file_path.set(path)
-            # 自动设置输出路径
-            base = os.path.splitext(path)[0]
-            self.output_path.set(f'{base}_cleaned.apkg')
+            size = self.processor.export_db(self.processor.cleaned_db, path)
+            self._log_info(self.info2, f'📦 已导出: {os.path.basename(path)} ({size/1024:.0f} KB)')
+
+    # ── Tab 3: 打包 ──
+
+    def _build_tab3(self):
+        tab = ttk.Frame(self.notebook, padding=12)
+        self.notebook.add(tab, text='③ 打包')
+
+        ttk.Label(tab, text='输出文件：').pack(anchor='w')
+        row = ttk.Frame(tab)
+        row.pack(fill='x', pady=(4, 8))
+        self.out_var = tk.StringVar()
+        ttk.Entry(row, textvariable=self.out_var).pack(side='left', fill='x', expand=True)
+        ttk.Button(row, text='选择位置', command=self._browse_output, width=8).pack(side='right', padx=(4, 0))
+
+        self.btn_pack = ttk.Button(tab, text='📦 打包为 apkg', command=self._do_pack)
+        self.btn_pack.pack(anchor='w')
+
+        self.info3 = tk.Text(tab, height=6, state='disabled', wrap='word', bg='#f5f5f5')
+        self.info3.pack(fill='both', expand=True, pady=(8, 0))
 
     def _browse_output(self):
         path = filedialog.asksaveasfilename(
-            title='保存为',
+            title='保存为 apkg',
             defaultextension='.apkg',
-            filetypes=[('Anki 牌组', '*.apkg')]
-        )
+            filetypes=[('Anki 牌组', '*.apkg')])
         if path:
-            self.output_path.set(path)
+            self.out_var.set(path)
 
-    def _log(self, msg):
-        self.log_text.configure(state='normal')
-        self.log_text.insert('end', msg + '\n')
-        self.log_text.see('end')
-        self.log_text.configure(state='disabled')
-        self.root.update()
-
-    def _do_extract(self):
-        """仅提取 apkg，展示信息"""
-        path = self.file_path.get()
-        if not path:
-            messagebox.showwarning('提示', '请先选择 apkg 文件')
+    def _do_pack(self):
+        if not self.processor or not self.processor.cleaned_db:
+            messagebox.showwarning('提示', '请先在 "② 清理" 中执行清理')
             return
-        
-        self.extract_status.configure(text='⏳ 正在提取...')
-        self.root.update()
-        
-        try:
-            # 创建处理器并提取
-            self.processor = ApkgProcessor(self.zstd_dll)
-            self.processor.open(path, self._log)
-            
-            ntypes = self.processor.get_notetypes()
-            note_count = self.processor.get_note_count()
-            
-            info = f'✅ 已提取: {note_count} 条笔记'
-            if ntypes:
-                info += f', {len(ntypes)} 种笔记类型'
-            self.extract_status.configure(text=info, foreground='green')
-            
-            self._log(f'✓ 数据库就绪')
-            for nid, name, fields in ntypes:
-                self._log(f'  📝 {name}: {len(fields)} 个字段 {fields}')
-            
-        except Exception as e:
-            self.extract_status.configure(text=f'❌ 提取失败', foreground='red')
-            self._log(f'❌ 错误: {e}')
-
-    def _run(self):
-        if not self.processor:
-            messagebox.showwarning('提示', '请先点击 "① 提取 apkg"')
-            return
-        
-        if not self.output_path.get():
-            messagebox.showwarning('提示', '请选择输出路径')
+        out = self.out_var.get()
+        if not out:
+            messagebox.showwarning('提示', '请选择输出位置')
             return
 
-        # 构建配置
-        config = {}
-        for key, var in self.checks.items():
-            config[key] = var.get()
-        
-        config['custom_regex'] = []
-        if self.custom_var.get() and self.regex_find.get():
-            config['custom_regex'].append((self.regex_find.get(), self.regex_replace.get()))
-        
-        engine = CleanEngine(config)
-        
-        # 禁用按钮
-        self.run_btn.configure(state='disabled')
-        
-        # 在后台线程运行
-        def _task():
+        self.btn_pack.configure(state='disabled')
+        self._log_info(self.info3, '⏳ 正在打包...')
+
+        def task():
             try:
-                self._log('\n🚀 开始清理...')
-                
-                # 构建目标字段 (清理所有可清理字段)
-                self.processor.process(engine, target_fields=None, progress_callback=self._log)
-                
-                # 重新打包
-                self._log('⏳ 正在打包...')
-                output = self.output_path.get()
-                if not output.endswith('.apkg'):
-                    output += '.apkg'
-                self.processor.repack(output, self._log)
-                
-                self._log('✅ 全部完成！')
-                
+                self.processor.repack(out, lambda m: self._log_info(self.info3, m))
             except Exception as e:
-                self._log(f'❌ 出错: {e}')
+                self._log_info(self.info3, f'❌ 失败: {e}')
             finally:
-                self.processor.cleanup()
-                self.processor = None
-                self.run_btn.configure(state='normal')
-                self.extract_status.configure(text='')
-        
-        threading.Thread(target=_task, daemon=True).start()
+                self.btn_pack.configure(state='normal')
 
+        threading.Thread(target=task, daemon=True).start()
 
-# ── 启动 ──────────────────────────────────────────────────
 
 def main():
-    # Windows 主题
     try:
         from ctypes import windll
         windll.shcore.SetProcessDpiAwareness(1)
     except:
         pass
-    
+
     app = AnkiCleanerApp()
     app.root.mainloop()
 
