@@ -5,7 +5,7 @@
 ## 功能流程
 
 ```mermaid
-graph TB
+graph LR
     subgraph Step1["① 解压"]
         A[选择 .apkg 文件] --> B[解压 ZIP]
         B --> C1{数据库格式?}
