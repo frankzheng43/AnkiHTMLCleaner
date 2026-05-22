@@ -18,17 +18,17 @@ flowchart LR
 
     subgraph S2["② 清理"]
         direction TB
-        B1["☑️ 勾选清理项目"] -->
-        B2["⚡ 执行清理"] -->
-        B3["💾 导出已清理 SQLite"]
+        B1["☑️ 勾选要清理的项目"] -->
+        B2["⚡ 开始执行清理"] -->
+        B3["💾 导出已清理的 SQLite"]
     end
 
     subgraph S3["③ 打包"]
         direction TB
-        C1{"原格式？"}
-        C1 -->|新版| C2["🔧 zstd 压缩"]
-        C1 -->|旧版| C3
-        C2 & C3 --> C4["📦 打包 .apkg"]
+        C1{"判断原文件格式"}
+        C1 -->|新版 anki21b| C2["🔧 zstd 压缩"]
+        C1 -->|旧版 anki2| C3
+        C2 & C3 --> C4["📦 打包为 .apkg"]
     end
 
     S1 --> S2 --> S3
