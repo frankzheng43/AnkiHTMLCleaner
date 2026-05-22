@@ -261,8 +261,10 @@ class AnkiCleanerApp:
         main.pack(fill='both', expand=True)
 
         # 标题
-        ttk.Label(main, text='Anki Apkg 清理工具', font=('', 15, 'bold')).pack(anchor='w')
-        ttk.Label(main, text='解压 → 清理 → 打包，三步完成', foreground='gray').pack(anchor='w', pady=(0, 8))
+        title_f = ttk.Frame(main)
+        title_f.pack(anchor='w', pady=(0, 8))
+        ttk.Label(title_f, text='🧹 Anki Apkg 清理工具', font=('', 16, 'bold')).pack(side='left')
+        ttk.Label(title_f, text='  🗂️解压 → 🧼清理 → 📦打包', foreground='gray').pack(side='left', padx=(12, 0))
 
         # 笔记本（三标签）
         self.notebook = ttk.Notebook(main)
@@ -280,22 +282,22 @@ class AnkiCleanerApp:
 
     def _build_tab1(self):
         tab = ttk.Frame(self.notebook, padding=12)
-        self.notebook.add(tab, text='① 解压')
+        self.notebook.add(tab, text='① 📂 解压')
 
         # 文件选择
-        ttk.Label(tab, text='选择 apkg 文件：').pack(anchor='w')
+        ttk.Label(tab, text='📁 选择 apkg 文件：').pack(anchor='w')
         row = ttk.Frame(tab)
         row.pack(fill='x', pady=(4, 8))
         self.file_var = tk.StringVar()
         ttk.Entry(row, textvariable=self.file_var).pack(side='left', fill='x', expand=True)
-        ttk.Button(row, text='浏览', command=self._browse_apkg, width=8).pack(side='right', padx=(4, 0))
+        ttk.Button(row, text='📂 浏览', command=self._browse_apkg, width=8).pack(side='right', padx=(4, 0))
 
         # 按钮行
         btn_row = ttk.Frame(tab)
         btn_row.pack(fill='x')
-        self.btn_extract = ttk.Button(btn_row, text='解压', command=self._do_extract)
+        self.btn_extract = ttk.Button(btn_row, text='🔓 解压', command=self._do_extract)
         self.btn_extract.pack(side='left')
-        self.btn_export1 = ttk.Button(btn_row, text='导出 SQLite', command=self._export_raw_db, state='disabled')
+        self.btn_export1 = ttk.Button(btn_row, text='💾 导出 SQLite', command=self._export_raw_db, state='disabled')
         self.btn_export1.pack(side='left', padx=(8, 0))
 
         # 信息展示
@@ -335,7 +337,7 @@ class AnkiCleanerApp:
                 self.processor.extract(path, lambda m: self._log_info(self.info1, m))
                 self.btn_export1.configure(state='normal')
                 self.tab1_status.configure(
-                    text=f'✅ 已解压 {self.processor.note_count} 条笔记，可进入下一步',
+                    text=f'✅ 已解压 {self.processor.note_count} 条笔记，可进入下一步 🧼',
                     foreground='green')
             except Exception as e:
                 self._log_info(self.info1, f'❌ 失败: {e}')
@@ -361,7 +363,7 @@ class AnkiCleanerApp:
 
     def _build_tab2(self):
         tab = ttk.Frame(self.notebook, padding=12)
-        self.notebook.add(tab, text='② 清理')
+        self.notebook.add(tab, text='② 🧼 清理')
 
         # 可滚动区域
         canvas = tk.Canvas(tab, highlightthickness=0)
@@ -426,9 +428,9 @@ class AnkiCleanerApp:
         # 按钮
         btn_row = ttk.Frame(tab)
         btn_row.pack(fill='x', pady=(6, 0))
-        self.btn_clean = ttk.Button(btn_row, text='▶ 开始清理', command=self._do_clean)
+        self.btn_clean = ttk.Button(btn_row, text='🧼 开始清理', command=self._do_clean)
         self.btn_clean.pack(side='left')
-        self.btn_export2 = ttk.Button(btn_row, text='导出已清理 SQLite', command=self._export_cleaned_db, state='disabled')
+        self.btn_export2 = ttk.Button(btn_row, text='💾 导出已清理 SQLite', command=self._export_cleaned_db, state='disabled')
         self.btn_export2.pack(side='left', padx=(8, 0))
 
         self.info2 = tk.Text(tab, height=5, state='disabled', wrap='word', bg='#f5f5f5')
@@ -477,16 +479,16 @@ class AnkiCleanerApp:
 
     def _build_tab3(self):
         tab = ttk.Frame(self.notebook, padding=12)
-        self.notebook.add(tab, text='③ 打包')
+        self.notebook.add(tab, text='③ 📦 打包')
 
-        ttk.Label(tab, text='输出文件：').pack(anchor='w')
+        ttk.Label(tab, text='📥 输出文件：').pack(anchor='w')
         row = ttk.Frame(tab)
         row.pack(fill='x', pady=(4, 8))
         self.out_var = tk.StringVar()
         ttk.Entry(row, textvariable=self.out_var).pack(side='left', fill='x', expand=True)
-        ttk.Button(row, text='选择位置', command=self._browse_output, width=8).pack(side='right', padx=(4, 0))
+        ttk.Button(row, text='📁 选择位置', command=self._browse_output, width=8).pack(side='right', padx=(4, 0))
 
-        self.btn_pack = ttk.Button(tab, text='📦 打包为 apkg', command=self._do_pack)
+        self.btn_pack = ttk.Button(tab, text='📦 打包为 .apkg', command=self._do_pack)
         self.btn_pack.pack(anchor='w')
 
         self.info3 = tk.Text(tab, height=6, state='disabled', wrap='word', bg='#f5f5f5')
