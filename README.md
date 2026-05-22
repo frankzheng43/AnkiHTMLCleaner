@@ -1,4 +1,5 @@
-# Anki Apkg 清理工具
+# AnkiHTMLCleaner
+![AnkiHTMLCleaner](AnkiHTMLCleaner.png)
 
 一键清理 Anki 牌组中从 Word/网页复制粘贴带来的冗余 HTML。
 
@@ -106,7 +107,7 @@ erDiagram
 | 中英/数字空格 | 中文与英文/数字之间补一个空格 |
 | 自定义正则 | 用户可自行填写查找/替换规则 |
 
-![AnkiHTMLCleaner](AnkiHTMLCleaner.png)
+
 
 ## 使用方法
 
@@ -127,12 +128,15 @@ pip install zstandard    # 新版 apkg 需要，旧版可跳过
 python anki_cleaner.py
 ```
 
-### 方式三：打包为 exe
+### 方式三：自行编译
 
 ```bash
-pip install pyinstaller
-pyinstaller --onefile --windowed --name "AnkiApkgCleaner" anki_cleaner.py
+# 双击 build.bat，或手动运行：
+pip install pyinstaller zstandard
+pyinstaller --onefile --windowed --icon "AnkiHTMLCleaner.ico" --name "AnkiApkgCleaner" anki_cleaner.py
 ```
+
+编译完成后，exe 在 `dist\AnkiApkgCleaner.exe`。
 
 ## 项目文件
 
@@ -146,4 +150,5 @@ README.md               ← 本文件
 
 - **运行时**：无（exe 自带 Python 运行时）
 - **源码运行**：Python 3.8+
+- **编译 exe**：`pyinstaller` + `zstandard`
 - **可选**：`zstandard`（支持新版 apkg，旧版不需要）
