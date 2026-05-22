@@ -5,28 +5,33 @@
 ## 功能流程
 
 ```mermaid
-flowchart TB
-    A(["📂 选择 .apkg"])
-    B["📦 解压 ZIP"]
-    C{"数据库格式？"}
-    D["🔧 zstd 解压"]
-    E["🗄️ 直接读取 SQLite"]
-    F["💾 导出原始 SQLite"]
-    G["☑️ 勾选清理项目"]
-    H["⚡ 执行清理"]
-    I["💾 导出已清理 SQLite"]
-    J{"原格式？"}
-    K["🔧 zstd 压缩"]
-    L["📦 打包 .apkg"]
+flowchart LR
+    subgraph S1["① 解压"]
+        direction TB
+        A1(["📂 选择 .apkg"]) -->
+        A2["📦 解压 ZIP"] -->
+        A3{"数据库格式？"}
+        A3 -->|collection.anki21b| A4["🔧 zstd 解压"]
+        A3 -->|collection.anki2| A5["🗄️ 直接读取"]
+        A4 & A5 --> A6["💾 导出原始 SQLite"]
+    end
 
-    A --> B --> C
-    C -->|collection.anki21b| D
-    C -->|collection.anki2| E
-    D --> F
-    E --> F
-    F --> G --> H --> I --> J
-    J -->|新版| K --> L
-    J -->|旧版| L
+    subgraph S2["② 清理"]
+        direction TB
+        B1["☑️ 勾选清理项目"] -->
+        B2["⚡ 执行清理"] -->
+        B3["💾 导出已清理 SQLite"]
+    end
+
+    subgraph S3["③ 打包"]
+        direction TB
+        C1{"原格式？"}
+        C1 -->|新版| C2["🔧 zstd 压缩"]
+        C1 -->|旧版| C3
+        C2 & C3 --> C4["📦 打包 .apkg"]
+    end
+
+    S1 --> S2 --> S3
 ```
 
 ## Apkg 文件结构
