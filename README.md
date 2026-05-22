@@ -5,31 +5,21 @@
 ## 功能流程
 
 ```mermaid
-graph LR
-    subgraph Step1["① 解压"]
-        A[选择 .apkg 文件] --> B[解压 ZIP]
-        B --> C1{数据库格式?}
-        C1 -->|collection.anki21b| D[zstd 解压]
-        C1 -->|collection.anki2| E[直接读取 SQLite]
-        D --> F[导出原始 SQLite]
-        E --> F
-    end
-
-    subgraph Step2["② 清理"]
-        G[勾选清理项目] --> H[执行清理]
-        H --> I[导出已清理 SQLite]
-    end
-
-    subgraph Step3["③ 打包"]
-        J[选择输出路径] --> K1{原格式?}
-        K1 -->|新版| L[zstd 压缩]
-        K1 -->|旧版| M
-        L --> N[打包 .apkg]
-        M --> N
-    end
-
-    F --> G
-    I --> J
+flowchart LR
+    A(["📂 选择 .apkg"]) -->
+    B["📦 解压 ZIP"] -->
+    C{"数据库格式？"}
+    C -->|collection.anki21b| D["🔧 zstd 解压"]
+    C -->|collection.anki2| E["🗄️ 直接读取 SQLite"]
+    D & E --> F["💾 导出原始 SQLite"]
+    F --> G["☑️ 勾选清理项目"]
+    G --> H["⚡ 执行清理"]
+    H --> I["💾 导出已清理 SQLite"]
+    I --> J{"原格式？"}
+    J -->|新版| K["🔧 zstd 压缩"]
+    J -->|旧版| L
+    K --> M["📦 打包 .apkg"]
+    L --> M
 ```
 
 ## Apkg 文件结构
