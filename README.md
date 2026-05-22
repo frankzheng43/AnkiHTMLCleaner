@@ -106,6 +106,10 @@ erDiagram
 | 中英/数字空格 | 中文与英文/数字之间补一个空格 |
 | 自定义正则 | 用户可自行填写查找/替换规则 |
 
+## 界面预览
+
+![AnkiApkgCleaner 界面](AnkiHTMLCleaner.png)
+
 ## 使用方法
 
 ### 方式一：运行 exe
