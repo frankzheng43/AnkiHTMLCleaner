@@ -46,8 +46,12 @@ def _get_sqlite3():
 def load_zstd():
     """查找并加载 libzstd.dll"""
     dll_name = 'libzstd.dll'
+    
+    # PyInstaller 打包后，附加文件在 _MEIPASS 下
+    base = getattr(sys, '_MEIPASS', os.path.dirname(__file__))
+    
     search_paths = [
-        os.path.join(os.path.dirname(__file__), dll_name),
+        os.path.join(base, dll_name),
         os.path.join(os.getcwd(), dll_name),
         # 常见安装路径
         os.path.expandvars(r'%LOCALAPPDATA%\Logseq\app-0.10.9\resources\app\node_modules\dugite\git\mingw64\bin\libzstd.dll'),
