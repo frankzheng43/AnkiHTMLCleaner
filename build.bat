@@ -18,8 +18,8 @@ echo     ✅ pyinstaller + zstandard
 
 :: 2. Build exe
 echo [2/3] Building exe...
-set ICON=AnkiHTMLCleaner.ico
-if not exist "%ICON%" set ICON=
+set ICON=assets\AnkiHTMLCleaner.ico
+if not exist "%ICON%" if exist "AnkiHTMLCleaner.ico" set ICON=AnkiHTMLCleaner.ico
 
 pyinstaller --onefile --windowed --icon "%ICON%" --name "AnkiApkgCleaner" anki_cleaner.py
 if %ERRORLEVEL% NEQ 0 (

@@ -1,5 +1,5 @@
 # AnkiHTMLCleaner
-![AnkiHTMLCleaner](AnkiHTMLCleaner.png)
+![AnkiHTMLCleaner](assets/AnkiHTMLCleaner.png)
 
 一键清理 Anki 牌组中从 Word/网页复制粘贴带来的冗余 HTML。
 
@@ -133,7 +133,7 @@ python anki_cleaner.py
 ```bash
 # 双击 build.bat，或手动运行：
 pip install pyinstaller zstandard
-pyinstaller --onefile --windowed --icon "AnkiHTMLCleaner.ico" --name "AnkiApkgCleaner" anki_cleaner.py
+pyinstaller --onefile --windowed --icon "assets\AnkiHTMLCleaner.ico" --name "AnkiApkgCleaner" anki_cleaner.py
 ```
 
 编译完成后，exe 在 `dist\AnkiApkgCleaner.exe`。

@@ -1,5 +1,5 @@
 """
-Anki Apkg 清理工具 — 三标签页版
+AnkiHTMLCleaner — 三标签页版
 仅支持旧版 apkg（collection.anki2，无 zstd 压缩）
 """
 
@@ -247,7 +247,7 @@ class ApkgProcessor:
 class AnkiCleanerApp:
     def __init__(self):
         self.root = tk.Tk()
-        self.root.title('Anki Apkg 清理工具')
+        self.root.title('AnkiHTMLCleaner')
         self.root.geometry('760x700')
         self.root.minsize(640, 600)
 
@@ -263,7 +263,7 @@ class AnkiCleanerApp:
         # 标题
         title_f = ttk.Frame(main)
         title_f.pack(anchor='w', pady=(0, 8))
-        ttk.Label(title_f, text='🧹 Anki Apkg 清理工具', font=('', 16, 'bold')).pack(side='left')
+        ttk.Label(title_f, text='🧹 AnkiHTMLCleaner', font=('', 16, 'bold')).pack(side='left')
         ttk.Label(title_f, text='  🗂️解压 → 🧼清理 → 📦打包', foreground='gray').pack(side='left', padx=(12, 0))
 
         # 笔记本（三标签）
