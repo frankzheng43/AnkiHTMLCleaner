@@ -1,0 +1,12 @@
+# Python
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+
+# Reasonix workspace config
+.reasonix/
+
+# 原始 apkg 和中间产物
+税务师.apkg
+税务师_cleaned.apkg
