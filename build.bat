@@ -21,7 +21,7 @@ echo [2/3] Building exe...
 set ICON=assets\AnkiHTMLCleaner.ico
 if not exist "%ICON%" if exist "AnkiHTMLCleaner.ico" set ICON=AnkiHTMLCleaner.ico
 
-pyinstaller --onefile --windowed --icon "%ICON%" --name "AnkiApkgCleaner" --add-data "core;core" anki_cleaner.py
+pyinstaller --onefile --windowed --icon "%ICON%" --name "AnkiApkgCleaner" --add-data "core;core" core/anki_cleaner.py
 if %ERRORLEVEL% NEQ 0 (
     echo ❌ Build failed
     pause

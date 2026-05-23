@@ -125,7 +125,7 @@ erDiagram
 
 ```bash
 pip install zstandard    # 新版 apkg 需要，旧版可跳过
-python anki_cleaner.py
+python core/anki_cleaner.py
 ```
 
 ### 方式三：自行编译
@@ -133,7 +133,7 @@ python anki_cleaner.py
 ```bash
 # 双击 build.bat，或手动运行：
 pip install pyinstaller zstandard
-pyinstaller --onefile --windowed --icon "assets\AnkiHTMLCleaner.ico" --name "AnkiApkgCleaner" --add-data "core;core" anki_cleaner.py
+pyinstaller --onefile --windowed --icon "assets\AnkiHTMLCleaner.ico" --name "AnkiApkgCleaner" --add-data "core;core" core/anki_cleaner.py
 ```
 
 编译完成后，exe 在 `dist\AnkiApkgCleaner.exe`。
@@ -142,7 +142,11 @@ pyinstaller --onefile --windowed --icon "assets\AnkiHTMLCleaner.ico" --name "Ank
 
 ```
 AnkiApkgCleaner.exe     ← 打包好的程序（双击运行）
-anki_cleaner.py         ← 源码
+core/anki_cleaner.py    ← GUI 主程序
+├── core/engine.py       ← 清理引擎
+├── core/extract.py      ← 解压模块
+├── core/clean.py        ← 清理模块
+├── core/pack.py         ← 打包模块
 README.md               ← 本文件
 ```
 
