@@ -128,7 +128,17 @@ pip install zstandard    # 新版 apkg 需要，旧版可跳过
 python core/anki_cleaner.py
 ```
 
-### 方式三：自行编译
+### 方式三：CLI 命令行
+
+每个模块可以独立运行：
+
+```bash
+python core/extract.py input.apkg output.sqlite     # 解压
+python core/clean.py input.sqlite output.sqlite      # 清理
+python core/pack.py input.sqlite output.apkg         # 打包
+```
+
+### 方式四：自行编译
 
 ```bash
 # 双击 build.bat，或手动运行：
@@ -142,12 +152,15 @@ pyinstaller --onefile --windowed --icon "assets\AnkiHTMLCleaner.ico" --name "Ank
 
 ```
 AnkiApkgCleaner.exe     ← 打包好的程序（双击运行）
-core/anki_cleaner.py    ← GUI 主程序
-├── core/engine.py       ← 清理引擎
-├── core/extract.py      ← 解压模块
-├── core/clean.py        ← 清理模块
-├── core/pack.py         ← 打包模块
+core/
+├── anki_cleaner.py     ← GUI 主程序
+├── engine.py           ← 清理引擎
+├── extract.py          ← 解压模块（可独立运行）
+├── clean.py            ← 清理模块（可独立运行）
+└── pack.py             ← 打包模块（可独立运行）
+assets/                 ← 图标和图片
 README.md               ← 本文件
+build.bat               ← 编译脚本
 ```
 
 ## 依赖
