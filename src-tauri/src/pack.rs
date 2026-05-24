@@ -1,4 +1,4 @@
-use std::io::{Read, Write};
+use std::io::Write;
 
 #[derive(serde::Serialize)]
 pub struct PackResult {
@@ -62,7 +62,7 @@ pub fn pack(
     let out_file = std::fs::File::create(output_path)
         .map_err(|e| format!("创建文件失败: {}", e))?;
     let mut zip = zip::ZipWriter::new(out_file);
-    let options = zip::write::FileOptions::default()
+    let options: zip::write::FileOptions<'_, ()> = zip::write::FileOptions::default()
         .compression_method(zip::CompressionMethod::Deflated);
 
     zip.start_file(&out_name, options)

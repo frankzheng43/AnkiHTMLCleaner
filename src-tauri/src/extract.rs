@@ -37,11 +37,14 @@ pub fn extract(apkg_path: &str, sqlite_out: &str, media_out: &str) -> Result<Ext
         .map(|n| n.to_string())
         .collect();
 
-    // 读取数据库文件
-    let mut db_file = archive.by_name(db_name).map_err(|e| format!("读取数据库失败: {}", e))?;
-    let mut raw_data: Vec<u8> = Vec::new();
-    std::io::Read::read_to_end(&mut db_file, &mut raw_data)
-        .map_err(|e| format!("读取数据失败: {}", e))?;
+    // 读取数据库文件（先读取数据，释放 archive 的借用后再处理媒体文件）
+    let raw_data: Vec<u8> = {
+        let mut db_file = archive.by_name(db_name).map_err(|e| format!("读取数据库失败: {}", e))?;
+        let mut buf = Vec::new();
+        std::io::Read::read_to_end(&mut db_file, &mut buf)
+            .map_err(|e| format!("读取数据失败: {}", e))?;
+        buf
+    };
 
     // 判断是否 zstd 压缩 (magic: 0x28b52ffd)
     let is_zstd = raw_data.len() >= 4 && raw_data[0..4] == [0x28, 0xb5, 0x2f, 0xfd];
@@ -56,7 +59,7 @@ pub fn extract(apkg_path: &str, sqlite_out: &str, media_out: &str) -> Result<Ext
             .map_err(|e| format!("写入 SQLite 失败: {}", e))?;
     }
 
-    // 提取媒体文件
+    // 提取媒体文件（archive 的借用已在上面释放）
     for name in &media_files {
         if let Ok(mut f) = archive.by_name(name) {
             let path = format!("{}/{}", media_out, name);
