@@ -13,6 +13,11 @@ upx-*/
 # Reasonix workspace config
 .reasonix/
 
+# Rust / Tauri build
+src-tauri/target/
+src-tauri/gen/
+src-tauri/Cargo.lock
+
 # 原始 apkg 和中间清理产物
 税务师.apkg
 税务师_cleaned.apkg
