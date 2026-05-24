@@ -1,0 +1,20 @@
+[package]
+name = "anki-html-cleaner"
+version = "0.1.0"
+edition = "2021"
+
+[lib]
+name = "anki_html_cleaner"
+crate-type = ["lib", "cdylib", "staticlib"]
+
+[dependencies]
+tauri = { version = "2", features = ["dialog"] }
+tauri-build = { version = "2", features = [] }
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+rusqlite = { version = "0.31", features = ["bundled"] }
+regex = "1"
+zip = "2"
+zstd = "0.13"
+html-escape = "0.2"
+lazy_static = "1"

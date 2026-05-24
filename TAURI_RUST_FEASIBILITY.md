@@ -141,7 +141,32 @@ fn export_db(src: String, dst: String) -> Result<(), String>
 | **跨平台** | ✅ 一次编写，三平台发布 |
 | **性能** | ✅ Rust 正则比 Python 快 10-20x，大数据量优势明显 |
 
-### 建议
+### 进度
+
+✅ 已编写完整 Rust 后端 + HTML/CSS 前端
+- `src-tauri/src/extract.rs` — 解压模块
+- `src-tauri/src/clean.rs` — 清理引擎（含单元测试）
+- `src-tauri/src/pack.rs` — 打包模块
+- `src-tauri/src/lib.rs` — Tauri 命令注册
+- `src-tauri/src/main.rs` — 入口
+- `frontend/index.html` / `style.css` / `script.js` — 三标签页前端
+
+### 本地编译
+
+```bash
+# 需要 Rust + Node.js
+git checkout feat/tauri-rust-rewrite
+./build-tauri.bat
+```
+
+或手动：
+
+```bash
+cargo install tauri-cli
+cargo tauri build
+```
+
+## 建议
 
 如果会 Rust → **值得做**，Tauri 生态已成熟（v2 稳定）。
 如果不会 Rust → 先学基础（所有权、trait、错误处理），预计 **1-2 周** 可完成移植。

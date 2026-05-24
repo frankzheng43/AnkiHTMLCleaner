@@ -1,0 +1,84 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>🧹 Anki Apkg 清理工具</title>
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+<div id="app">
+  <header>
+    <h1>🧹 Anki Apkg 清理工具</h1>
+    <span class="subtitle">🗂️ 解压 → 🧼 清理 → 📦 打包</span>
+  </header>
+
+  <!-- 标签栏 -->
+  <nav class="tabs">
+    <button class="tab active" data-tab="1">① 📂 解压</button>
+    <button class="tab" data-tab="2">② 🧼 清理</button>
+    <button class="tab" data-tab="3">③ 📦 打包</button>
+  </nav>
+
+  <!-- Tab 1: 解压 -->
+  <section id="tab-1" class="tab-content active">
+    <div class="card">
+      <label>📁 选择 apkg 文件：</label>
+      <div class="row">
+        <input type="text" id="apkg-path" placeholder="点击浏览选择 .apkg 文件" readonly>
+        <button id="browse-btn">📂 浏览</button>
+      </div>
+    </div>
+    <div class="card">
+      <div class="row">
+        <button id="extract-btn" class="primary">🔓 解压</button>
+        <button id="export-sqlite-btn" disabled>💾 导出 SQLite</button>
+      </div>
+    </div>
+    <div id="extract-log" class="log"></div>
+    <div id="tab1-status" class="status"></div>
+  </section>
+
+  <!-- Tab 2: 清理 -->
+  <section id="tab-2" class="tab-content">
+    <div class="card">
+      <div id="options-list">
+        <!-- 由 JS 动态生成 -->
+      </div>
+    </div>
+    <div class="card">
+      <label>自定义查找替换：</label>
+      <div class="row">
+        <input type="text" id="custom-find" placeholder="查找">
+        <input type="text" id="custom-replace" placeholder="替换为">
+      </div>
+      <label class="checkbox"><input type="checkbox" id="custom-enable"> 启用</label>
+    </div>
+    <div class="row">
+      <button id="clean-btn" class="primary">🧼 开始清理</button>
+      <button id="export-cleaned-btn" disabled>💾 导出已清理 SQLite</button>
+    </div>
+    <div id="clean-log" class="log"></div>
+  </section>
+
+  <!-- Tab 3: 打包 -->
+  <section id="tab-3" class="tab-content">
+    <div class="card">
+      <label>📥 输出文件：</label>
+      <div class="row">
+        <input type="text" id="output-path" placeholder="选择保存位置">
+        <button id="output-browse-btn">📁 选择位置</button>
+      </div>
+    </div>
+    <button id="pack-btn" class="primary">📦 打包为 .apkg</button>
+    <div id="pack-log" class="log"></div>
+  </section>
+</div>
+
+<!-- Tauri API -->
+<script>
+const { invoke } = window.__TAURI__?.core || {};
+</script>
+<script src="script.js"></script>
+</body>
+</html>
